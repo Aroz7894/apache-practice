@@ -33,7 +33,6 @@ def merge_dataframes(dataset1_path: str, dataset2_path: str) -> pd.DataFrame:
     return merged_df
 
 
-
 def generate_group_by_cals(merged_df: pd.DataFrame  ) -> pd.DataFrame:
     # Group by 'legal_entity', 'counter_party', and 'tier' and calculate the required aggregates
     grouped_df = merged_df.groupby(group_by_cols_list).agg(
@@ -58,3 +57,9 @@ def create_output_file(df: pd.DataFrame):
     df.to_csv('output_pandas.csv', index=False)
     print(df)
     print("Pandas File Generated Successfully")
+
+
+if __name__ == "__main__":
+    dataset1_path = 'resources/dataset1.csv'
+    dataset2_path = 'resources/dataset2.csv'
+    generate_output_file(dataset1_path, dataset2_path)
