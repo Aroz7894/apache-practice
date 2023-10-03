@@ -1,9 +1,8 @@
 import apache_beam as beam
 from apache_beam.options.pipeline_options import PipelineOptions
+from apache_beam.io import WriteToText
 
 options = PipelineOptions()
-
-return_dict = {}
 
 # Define schema for dataset1 and dataset2
 dataset1_schema = {
@@ -57,21 +56,11 @@ class JoinData(beam.DoFn):
                         'status': data1['status'],
                         'value': data1['value']
                     }
-
-
-class GroupByKeys(beam.DoFn):
-     def process(self, element):
-        for key in element:
-            if key not in return_dict:
-                return_dict[key] = [element[key]]
-            else:
-                return_dict[key].append(element[key])
-        return return_dict
          
 class CalculateAggregates(beam.DoFn):
     def process(self, element):
         (counter_party, legal_entity, tier), records = element
-        max_rating = max(records, key=lambda x: x['rating'])['rating']
+        max_rating = max(record['rating'] for record in records)
         sum_value_arap = sum(record['value'] for record in records if record['status'] == 'ARAP')
         sum_value_accr = sum(record['value'] for record in records if record['status'] == 'ACCR')
 
@@ -83,6 +72,42 @@ class CalculateAggregates(beam.DoFn):
             'sum_value_arap': sum_value_arap,
             'sum_value_accr': sum_value_accr
         }
+
+class CalculateTotals(beam.DoFn):
+    def process(self, element):
+        (key), records = element
+        max_rating = max(record['rating'] for record in records)
+        sum_value_arap = sum(record['value'] for record in records if record['status'] == 'ARAP')
+        sum_value_accr = sum(record['value'] for record in records if record['status'] == 'ACCR')
+
+        
+        if isinstance(key, int):
+            counter_party = 'Total'
+            legal_entity = 'Total'
+            tier = key
+        elif 'C' in key: 
+            counter_party = key
+            legal_entity = 'Total'
+            tier = 'Total'
+        else:
+            counter_party = 'Total'
+            legal_entity = key
+            tier = 'Total'
+
+        yield {
+            'counter_party': counter_party,
+            'legal_entity': legal_entity,
+            'tier': tier,
+            'max_rating': max_rating,
+            'sum_value_arap': sum_value_arap,
+            'sum_value_accr': sum_value_accr
+        }
+
+
+def dict_to_csv(record):
+    # Convert a dictionary record to a CSV formatted string using provided headers
+    return ','.join(str(record[key]) for key in record)
+
 
 if __name__ == "__main__":
     with beam.Pipeline(options=options) as p:
@@ -102,16 +127,30 @@ if __name__ == "__main__":
 
         # CoGroupByKey to join based on 'counter_party'
         joined_data = {'dataset1': dataset1_keyed, 'dataset2': dataset2_keyed} | beam.CoGroupByKey()
-
-        # Process the joined data
         processed_data = joined_data | 'Process Joined Data' >> beam.ParDo(JoinData())
 
         # Group by 'counter_party', 'legal_entity', and 'tier' and calculate aggregates
-        grouped_data = processed_data | 'Group by keys' >> beam.Map(lambda x: {(x['counter_party'], x['legal_entity'], x['tier']): x})
-        group_single_key = grouped_data | 'group like keys together' >> beam.ParDo(GroupByKeys())
+        grouped_data_multip_cols = processed_data | 'Group by keys' >> beam.GroupBy(lambda x: (x['counter_party'], x['legal_entity'], x['tier']))
+        aggregated_data_by_multi_cols = grouped_data_multip_cols | 'Calculate Aggregates' >> beam.ParDo(CalculateAggregates())
 
-        print(return_dict)
-        #aggregated_data = grouped_data | 'Calculate Aggregates' >> beam.ParDo(CalculateAggregates())
+        #Group by counter_party and calculate aggregates 
+        grouped_by_counter_party = processed_data | 'Group by couter party' >> beam.GroupBy(lambda x: (x['counter_party']))
+        aggregated_by_counter_party = grouped_by_counter_party | 'Calculate totals by counter party' >> beam.ParDo(CalculateTotals())
+        
+        #Group by legal_entity and calculate aggregates 
+        grouped_by_legal_entity = processed_data | 'Group by legal_entity' >> beam.GroupBy(lambda x: (x['legal_entity']))
+        aggregated_by_legal_entity = grouped_by_legal_entity | 'Calculate totals by legal_entity' >> beam.ParDo(CalculateTotals())
 
-        # Print the output
-        group_single_key | 'Print Output' >> beam.Map(print)
+        #Group by tier and calculate aggregates 
+        grouped_by_tier = processed_data | 'Group by tier' >> beam.GroupBy(lambda x: (x['tier']))
+        aggregated_by_tier = grouped_by_tier | 'Calculate totals by tier' >> beam.ParDo(CalculateTotals())
+
+
+        #join all rows together 
+        header = 'counter_party,legal_entity,tier,max_rating,sum_value_arap,sum_value_accr'
+        final_data = ((aggregated_data_by_multi_cols,aggregated_by_counter_party, aggregated_by_legal_entity, aggregated_by_tier) | 'Merge PCollections' >> beam.Flatten())
+        
+        #Write to csv file 
+        csv_lines = final_data | "Convert to CSV lines" >> beam.Map(dict_to_csv)
+        csv_lines | 'Write to csv' >> WriteToText(file_path_prefix='apache_output', file_name_suffix='.csv', header=header)
+        print('Apache File Generated Successfully')
