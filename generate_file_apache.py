@@ -69,8 +69,8 @@ class CalculateAggregates(beam.DoFn):
             'legal_entity': legal_entity,
             'tier': tier,
             'max_rating': max_rating,
-            'sum_value_arap': sum_value_arap,
-            'sum_value_accr': sum_value_accr
+            'sum_arap': sum_value_arap,
+            'sum_accr': sum_value_accr
         }
 
 class CalculateTotals(beam.DoFn):
@@ -99,26 +99,26 @@ class CalculateTotals(beam.DoFn):
             'legal_entity': legal_entity,
             'tier': tier,
             'max_rating': max_rating,
-            'sum_value_arap': sum_value_arap,
-            'sum_value_accr': sum_value_accr
+            'sum_arap': sum_value_arap,
+            'sum_accr': sum_value_accr
         }
 
 
 def dict_to_csv(record):
-    # Convert a dictionary record to a CSV formatted string using provided headers
+    # Convert a dictionary to a CSV formatted string
     return ','.join(str(record[key]) for key in record)
 
 
-if __name__ == "__main__":
+def generate_apache_file(dataset1_path: str, dataset2_path: str):
     with beam.Pipeline(options=options) as p:
         # Read datasets
         dataset1_pcollection = (
-            p | 'Read dataset 1' >> beam.io.ReadFromText('resources/dataset1.csv', skip_header_lines=1)
-              | 'Parse dataset 1' >> beam.ParDo(ParseDataset1())
+            p | 'Read dataset 1' >> beam.io.ReadFromText(dataset1_path, skip_header_lines=1)
+            | 'Parse dataset 1' >> beam.ParDo(ParseDataset1())
         )
         dataset2_pcollection = (
-            p | 'Read dataset 2' >> beam.io.ReadFromText('resources/dataset2.csv', skip_header_lines=1)
-              | 'Parse dataset 2' >> beam.ParDo(ParseDataset2())
+            p | 'Read dataset 2' >> beam.io.ReadFromText(dataset2_path, skip_header_lines=1)
+            | 'Parse dataset 2' >> beam.ParDo(ParseDataset2())
         )
 
         # Key the PCollections by 'counter_party'
@@ -145,12 +145,10 @@ if __name__ == "__main__":
         grouped_by_tier = processed_data | 'Group by tier' >> beam.GroupBy(lambda x: (x['tier']))
         aggregated_by_tier = grouped_by_tier | 'Calculate totals by tier' >> beam.ParDo(CalculateTotals())
 
-
         #join all rows together 
-        header = 'counter_party,legal_entity,tier,max_rating,sum_value_arap,sum_value_accr'
+        header = 'counter_party,legal_entity,tier,max_rating,sum_ARAP,sum_ACCR'
         final_data = ((aggregated_data_by_multi_cols,aggregated_by_counter_party, aggregated_by_legal_entity, aggregated_by_tier) | 'Merge PCollections' >> beam.Flatten())
         
         #Write to csv file 
         csv_lines = final_data | "Convert to CSV lines" >> beam.Map(dict_to_csv)
         csv_lines | 'Write to csv' >> WriteToText(file_path_prefix='apache_output', file_name_suffix='.csv', header=header)
-        print('Apache File Generated Successfully')
