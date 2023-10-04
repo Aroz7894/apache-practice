@@ -5,7 +5,7 @@ import numpy as np
 group_by_cols_list = ['legal_entity', 'counter_party', 'tier']
 
 
-def generate_output_file(dataset1_path: str, dataset2_path: str):
+def generate_pandas_output_file(dataset1_path: str, dataset2_path: str):
     try:
         merged_df = merge_dataframes(dataset1_path, dataset2_path)
         groupby_df = generate_group_by_cals(merged_df)
@@ -55,11 +55,4 @@ def caluclate_totals(df: pd.DataFrame, group_by_col_nm: str) -> pd.DataFrame:
 
 def create_output_file(df: pd.DataFrame):
     df.to_csv('output_pandas.csv', index=False)
-    print(df)
     print("Pandas File Generated Successfully")
-
-
-if __name__ == "__main__":
-    dataset1_path = 'resources/dataset1.csv'
-    dataset2_path = 'resources/dataset2.csv'
-    generate_output_file(dataset1_path, dataset2_path)

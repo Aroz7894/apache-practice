@@ -32,6 +32,19 @@ where caluclated_value in sample data needs to be calculated using above method.
 2. Add records for total by each of legal entity, counterparty & tier and calcualte max(rating by counterparty), sum(value where status=ARAP), sum(value where status=ACCR)
 3. Use total as place holder for empty values. 
 
-
 ## How To run 
-To run the code to generate the output csv files, run *python generate_file_pandas.py* and *python generate_file_apache.py* for the respective frameworks. 
+1. run comman *pip install -r dependencies.txt* to install necessary libraries 
+2. Run *python main.py* to generate the output csv files using both respective frameworks. *Note: if output files already exist they need to be deleted before running the code*.
+
+
+## Things I would look into more
+1. Utilizing apache beams aggregate_field method to do the calculation instead of having to write custom methods. 
+    - This works but in the format i needed it in
+    '''
+    aggregated_by_tier = processed_data | 'Group by tier' >> beam.GroupBy(lambda x: (x['tier'])).aggregate_field(
+        lambda x: (x['rating']), max, 'max_rating').aggregate_field(lambda x: x['value'] if x['status'] == 'ACCR' else 0, sum, 'sum_ACCR').aggregate_field(
+            lambda x: x['value'] if x['status'] == 'ARAP' else 0, sum, 'sum_ARAP').aggregate_field(lambda x: x, total,'counter_party').aggregate_field(lambda x: x, total,'legal_entity')
+    '''
+2. Better way of generating csv file from apache beams PCCollection 
+3. Using Apache Beams Dataframe library. Tried using it a couple different ways but had trouble merging the 2 datasets together. 
+4. Better exception handling to catch specific errors
