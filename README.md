@@ -40,11 +40,11 @@ where caluclated_value in sample data needs to be calculated using above method.
 ## Things I would look into more
 1. Utilizing apache beams aggregate_field method to do the calculation instead of having to write custom methods. 
     - This works but not in the format i needed it in
-    ''' python
+    ```python
     aggregated_by_tier = processed_data | 'Group by tier' >> beam.GroupBy(lambda x: (x['tier'])).aggregate_field(
         lambda x: (x['rating']), max, 'max_rating').aggregate_field(lambda x: x['value'] if x['status'] == 'ACCR' else 0, sum, 'sum_ACCR').aggregate_field(
             lambda x: x['value'] if x['status'] == 'ARAP' else 0, sum, 'sum_ARAP').aggregate_field(lambda x: x, total,'counter_party').aggregate_field(lambda x: x, total,'legal_entity')
-    '''
+    ```
 2. Better way of generating csv file from apache beams PCCollection 
 3. Using Apache Beams Dataframe library. Tried using it a couple different ways but had trouble merging the 2 datasets together. 
 4. Better exception handling to catch specific errors
